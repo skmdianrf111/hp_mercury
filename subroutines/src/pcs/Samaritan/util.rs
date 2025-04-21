@@ -97,7 +97,7 @@ pub(crate) fn trim_trailing_zeros<F: Field>(mut coeffs: Vec<F>) -> Vec<F> {
     coeffs
 }
 pub(crate) fn compute_f_hat<F: Field>(evaluations: &[F], num_vars: usize) -> Vec<F> {
-    let n = log2(num_vars);
+    let n = num_vars;
     let mut f_hat_coeffs = vec![F::zero(); 1 << n];
 
     for i in 0..(1 << n) {
@@ -205,7 +205,9 @@ pub(crate) fn compute_phat<F: PrimeField>(q_poly: MultiPoly<F>, gamma: F) -> Den
         }
         p_hat_coeffs[y_deg] += term;
     }
-    DensePolynomial::from_coefficients_vec(trim_trailing_zeros(p_hat_coeffs))
+    DensePolynomial {
+        coeffs: p_hat_coeffs,
+    }
 }
 
 pub(crate) fn compute_r<F: Field>(q_poly: MultiPoly<F>, gamma: F) -> MultiPoly<F>
@@ -244,9 +246,10 @@ where
         let degree = m * x_deg + y_deg;
         r_hat_coeffs[degree] += coeff;
     }
-    DensePolynomial::from_coefficients_vec(trim_trailing_zeros(r_hat_coeffs))
+    DensePolynomial {
+        coeffs: r_hat_coeffs,
+    }
 }
-
 pub(crate) fn polynomial_mul<F: Field>(
     poly1: &DensePolynomial<F>,
     poly2: &DensePolynomial<F>,
@@ -259,7 +262,7 @@ pub(crate) fn polynomial_mul<F: Field>(
         }
     }
 
-    DensePolynomial::from_coefficients_vec(trim_trailing_zeros(result_coeffs))
+    DensePolynomial::from_coefficients_vec(result_coeffs)
 }
 
 pub(crate) fn compute_t<F: PrimeField>(
@@ -286,7 +289,7 @@ pub(crate) fn compute_t<F: PrimeField>(
                 coeffs[idx] = poly.coeffs()[i as usize];
             }
         }
-        DensePolynomial::from_coefficients_vec(trim_trailing_zeros(coeffs))
+        DensePolynomial::from_coefficients_vec(coeffs)
     };
 
     let add_polynomials =
@@ -373,7 +376,7 @@ where
         ));
     }
     quotient.reverse();
-    let q_poly = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(quotient));
+    let q_poly = DensePolynomial::from_coefficients_vec(quotient);
     let commitment: crate::pcs::structs::Commitment<E> = commit(pp, &q_poly)?;
     let proof = Proof {
         w: commitment.0,

@@ -101,7 +101,8 @@ where
         let commit_timer = start_timer!(|| "commit");
         let f_hat_coeffs = poly.evaluations.to_vec();
         let n = f_hat_coeffs.len();
-        let f_hat_coeffs = compute_f_hat(&f_hat_coeffs, n);
+        let miu = log2(n);
+        let f_hat_coeffs = compute_f_hat(&f_hat_coeffs, miu as usize);
         let f_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(f_hat_coeffs));
         let comm = commit(prover_param, &f_hat)?;
         end_timer!(commit_timer);
@@ -113,7 +114,7 @@ where
         z: &Self::Point,
     ) -> Result<(Self::Proof, Self::Evaluation), PCSError> {
         let f_hat_coeffs = f_poly.evaluations.to_vec();
-        let n = f_hat_coeffs.len();
+        let n = z.len();
         let f_hat_coeffs = compute_f_hat(&f_hat_coeffs, n);
         let miu = z.len() as u32;
         let (proof, evaluation) =
@@ -244,9 +245,7 @@ where
         let step = start_timer!(|| "pcs open");
         let (g_prime_proof, _g_prime_eval) = Self::open(prover_param, &g_prime, a2.to_vec().as_ref())?;
         // assert_eq!(g_prime_eval, tilde_g_eval);
-        println!("g_prime_proof{:?}",g_prime_proof);
         end_timer!(step);
-        
 
         let step = start_timer!(|| "evaluate fi(pi)");
         end_timer!(step);
@@ -259,6 +258,15 @@ where
         })
     }
 
+    /// Verifies that `value` is the evaluation at `x` of the polynomial
+    /// committed inside `comm`.
+    ///
+    /// This function takes
+    /// - num_var number of pairing product.
+    /// - num_var number of MSM
+
+    /// Verifies that `value_i` is the evaluation at `x_i` of the polynomial
+    /// `poly_i` committed inside `comm`.
     fn batch_verify(
         verifier_param: &Self::VerifierParam,
         commitments: &[Self::Commitment],
@@ -335,6 +343,7 @@ where
             &tilde_g_eval,
             &batch_proof.g_prime_proof,
         )?;
+
         end_timer!(open_timer);
         Ok(res)
     }
@@ -367,19 +376,26 @@ where
     let mut proofs: Vec<ark_poly_commit::kzg10::Proof<E>> = Vec::new();
 
     let g_hat = generate_ghat(&f_hat_coeffs, miu);
+    for (i, g) in g_hat.iter().enumerate() {
+        println!("g_hat{}: {:?}", i + 1, g.coeffs);
+    }
     let q_poly = compute_q(&g_hat, l);
     let z_x = &z[z.len() - k..];
     let z_y = &z[..miu as usize - k];
-
+    println!("z{:?}",z);
+    println!("z_y{:?}",z_y);
+    println!("z_x{:?}", z_x);
     let mut v_vec: Vec<E::ScalarField> = Vec::with_capacity(l);
     for i in 1..=l {
         let g_tilde = compute_gtilde(f_poly, miu, i);
+        println!("g_tilde{:?}", g_tilde);
         let v_i = g_tilde.evaluate(&z_x).unwrap();
         v_vec.push(v_i);
     }
 
-    let v_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(v_vec.clone()));
+    let v_hat = DensePolynomial::from_coefficients_vec(v_vec.clone());
     let psi_hat = compute_psihat(&z_y);
+    println!("psi_hat(X) = {:?}", psi_hat.coeffs);
     let v_psi = polynomial_mul(&v_hat, &psi_hat);
 
     let mut a_coeffs = vec![E::ScalarField::zero(); v_psi.degree() - l + 1];
@@ -388,13 +404,23 @@ where
     for i in l..=v_psi.degree() {
         a_coeffs[i - l] = v_psi.coeffs[i];
     }
+    if (v == E::ScalarField::from(v_psi.coeffs[l - 1].into_bigint())) {
+        println!("YES111");
+    } else {
+        println!("NO111")
+    }
     for i in 0..l - 1 {
         b_coeffs[i] = v_psi.coeffs[i];
     }
 
-    let a_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(a_coeffs));
-    let b_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(b_coeffs));
-
+    let a_hat = DensePolynomial::from_coefficients_vec(a_coeffs);
+    let b_hat = DensePolynomial::from_coefficients_vec(b_coeffs);
+    println!("v_psi(X) = {:?}", v_psi.coeffs);
+    println!("a_hat(X) = {:?}", a_hat.coeffs);
+    // println!("test = {:?}",test.coeffs);
+    println!("v = {:?}", v);
+    // // println!("v_psi.coeffs(l-1)={:?}", test);
+    println!("b_hat(X) = {:?}", b_hat.coeffs);
     let cm_v = commit(pp, &v_hat)?;
     let cm_a = commit(pp, &a_hat)?;
     commitments.push(cm_v);
@@ -416,24 +442,39 @@ where
     proofs.push(proof_vgamma);
 
     let p_hat = compute_phat(q_poly.clone(), gamma);
+    println!("p_hat(X) = Q(gamma, X) = {:?}", p_hat);
     let r_poly = compute_r(q_poly, gamma);
     let r_hat = compute_r_hat(r_poly, m);
 
     let psi_hat_y = compute_psihat(z_x);
-    let p_psi = polynomial_mul(&p_hat, &psi_hat_y);
+    let p_psi = &p_hat * &psi_hat_y;
 
     let mut h_coeffs = vec![E::ScalarField::zero(); p_psi.degree() - m + 1];
     let mut u_coeffs = vec![E::ScalarField::zero(); m - 1];
 
-    for i in m..=v_psi.degree() {
+    for i in m..=p_psi.degree() {
         h_coeffs[i - m] = p_psi.coeffs[i];
+    }
+    if (v_gamma == E::ScalarField::from(p_psi.coeffs[m - 1].into_bigint())) {
+        println!("YES222");
+    } else {
+        println!("NO222")
     }
     for i in 0..m - 1 {
         u_coeffs[i] = p_psi.coeffs[i];
     }
 
-    let h_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(h_coeffs));
-    let u_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(u_coeffs));
+    let h_hat = DensePolynomial::from_coefficients_vec(h_coeffs);
+    let u_hat = DensePolynomial::from_coefficients_vec(u_coeffs);
+
+    println!("p_psi(X) = {:?}", p_psi.coeffs);
+    println!("h_hat(X) = {:?}", h_hat.coeffs);
+    println!("v_gamma = {:?}", v_gamma);
+    // println!(
+    //     "p_psi.coeffs(m-1)={}",
+    //     Fr::from(p_psi.coeffs[m - 1].into_bigint())
+    // );
+    println!("u_hat(X) = {:?}", u_hat.coeffs);
 
     let cm_p = commit(pp, &p_hat)?;
     let cm_r = commit(pp, &r_hat)?;
@@ -455,9 +496,9 @@ where
     let beta: E::ScalarField = transcript.get_and_append_challenge(b"challenge_beta")?;
 
     let t_poly = compute_t(&p_hat, &u_hat, &b_hat, beta, m as u64, l as u64);
+    println!("t(X) = {:?}", t_poly.coeffs);
     let cm_t = commit(pp, &t_poly)?;
     commitments.push(cm_t);
-
     let mut buf_t = Vec::new();
     cm_t.serialize_compressed(&mut buf_t)?;
     transcript.append_message(b"commitment_t", &buf_t)?;
@@ -465,25 +506,35 @@ where
     let delta: E::ScalarField = transcript.get_and_append_challenge(b"challenge_delta")?;
     let delta_inv = delta.inverse().unwrap();
 
-    let f_hat = DensePolynomial::from_coefficients_vec(trim_trailing_zeros(f_hat_coeffs.to_vec()));
-    let (f_delta, proof_fdelta) = kzg_prove(pp, &f_hat, delta)?;
+    let f_hat = DensePolynomial::from_coefficients_vec(f_hat_coeffs.to_vec());
+    let (f_delta, proof_fdelta) = kzg_prove(&pp, &f_hat, delta)?;
     proofs.push(proof_fdelta);
 
-    let (p_delta, proof_pdelta) = kzg_prove(pp, &p_hat, delta)?;
+    let (p_delta, proof_pdelta) = kzg_prove(&pp, &p_hat, delta)?;
     proofs.push(proof_pdelta);
 
-    let (h_delta, proof_hdelta) = kzg_prove(pp, &h_hat, delta)?;
+    let (h_delta, proof_hdelta) = kzg_prove(&pp, &h_hat, delta)?;
     proofs.push(proof_hdelta);
 
-    let (v_delta, proof_vdelta) = kzg_prove(pp, &v_hat, delta)?;
+    let (v_delta, proof_vdelta) = kzg_prove(&pp, &v_hat, delta)?;
     proofs.push(proof_vdelta);
 
-    let (a_delta, proof_adelta) = kzg_prove(pp, &a_hat, delta)?;
+    let (a_delta, proof_adelta) = kzg_prove(&pp, &a_hat, delta)?;
     proofs.push(proof_adelta);
 
+    let b_delta = b_hat.evaluate(&delta);
+    let u_delta = u_hat.evaluate(&delta);
+    println!("b_delta1{:?}",b_delta);
+    println!("u_delta1{:?}",u_delta);
     let (t_delta_inv, proof_tdelta_inv) = kzg_prove(pp, &t_poly, delta_inv)?;
     proofs.push(proof_tdelta_inv);
-
+    println!("delta1{:?}",delta);
+    // println!("t1(delta^{{-1}}) = {:?}", t_delta_inv);
+    // let delta_m1 = delta_inv.pow(&[(m - 1) as u64]);
+    // let delta_m2 = delta_inv.pow(&[(m - 2) as u64]);
+    // let delta_l2 = delta_inv.pow(&[(l - 2) as u64]);
+    // let t_delta_inv = delta_m1 * p_delta + beta * delta_m2 * u_delta + beta*beta
+    // * delta_l2 * b_delta; println!("t(delta^{{-1}}) = {:?}", t_delta_inv);
     let eval_slice: Vec<E::ScalarField> = vec![
         delta,
         t_delta_inv,
@@ -498,6 +549,12 @@ where
         E::ScalarField::from(m as u64),
         E::ScalarField::from(l as u64),
     ];
+    let delta_m = delta.pow(&[m as u64]);
+    let delta_m_1 = delta.pow(&[(m - 1) as u64]);
+    let psi_hat_y = compute_psihat(z_x);
+    let psi_delta_y = psi_hat_y.evaluate(&delta);
+    let u_delta = p_delta * psi_delta_y - delta_m * h_delta - v_gamma * delta_m_1;
+    println!("u_verify{:?}", u_delta);
     evaluations.extend_from_slice(&eval_slice);
     let evaluation = evaluations[7];
 
@@ -534,34 +591,36 @@ where
     let cm_h = proof.commitments[4];
     let cm_t = proof.commitments[5];
 
+    //恢复gamma
     let mut transcript = IOPTranscript::<E::ScalarField>::new(b"MyKZGPCS");
     let mut buf_v = Vec::new();
-    cm_v.serialize_compressed(&mut buf_v)?;
+    cm_v.serialize_compressed(&mut buf_v)?; // 序列化为字节
     transcript.append_message(b"commitment_v", &buf_v)?;
 
     let mut buf_a = Vec::new();
-    cm_a.serialize_compressed(&mut buf_a)?;
+    cm_a.serialize_compressed(&mut buf_a)?; // 序列化为字节
     transcript.append_message(b"commitment_a", &buf_a)?;
 
     let gamma: E::ScalarField = transcript.get_and_append_challenge(b"challenge_gamma")?;
-
+    println!("gamma{:?}",gamma);
     let mut buf_p = Vec::new();
-    cm_p.serialize_compressed(&mut buf_p)?;
+    cm_p.serialize_compressed(&mut buf_p)?; // 序列化为字节
     transcript.append_message(b"commitment_p", &buf_p)?;
     let mut buf_r = Vec::new();
-    cm_r.serialize_compressed(&mut buf_r)?;
+    cm_r.serialize_compressed(&mut buf_r)?; // 序列化为字节
     transcript.append_message(b"commitment_r", &buf_r)?;
     let mut buf_h = Vec::new();
-    cm_h.serialize_compressed(&mut buf_h)?;
+    cm_h.serialize_compressed(&mut buf_h)?; // 序列化为字节
     transcript.append_message(b"commitment_h", &buf_h)?;
-
     let beta: E::ScalarField = transcript.get_and_append_challenge(b"challenge_beta")?;
-
+    println!("beta{:?}",beta);
     let mut buf_t = Vec::new();
-    cm_t.serialize_compressed(&mut buf_t)?;
+    cm_t.serialize_compressed(&mut buf_t)?; // 序列化为字节
     transcript.append_message(b"commitment_t", &buf_t)?;
 
     let delta: E::ScalarField = transcript.get_and_append_challenge(b"challenge_delta")?;
+    println!("delta{:?}",delta);
+    println!("evaluations{:?}",proof.evaluations);
 
     let t_delta_inv = proof.evaluations[1];
     let f_delta = proof.evaluations[2];
@@ -594,49 +653,55 @@ where
         ark_poly_commit::kzg10::Commitment(cm_a.0),
         ark_poly_commit::kzg10::Commitment(cm_t.0),
     ];
-    let batch_points = vec![gamma, delta, delta, delta, delta, delta, delta_inv];
 
-    let batch_values = vec![
-        v_gamma,
-        f_delta,
-        p_delta,
-        h_delta,
-        v_delta,
-        a_delta,
-        t_delta_inv,
+    let batch_points = vec![
+        gamma,      
+        delta,     
+        delta,      
+        delta,      
+        delta,      
+        delta,      
+        delta_inv,  
     ];
 
-    let batch_proof_bytes = proof
-        .batch_proof
-        .as_ref()
+    let batch_values = vec![
+        v_gamma,    
+        f_delta,     
+        p_delta,     
+        h_delta,     
+        v_delta,     
+        a_delta,     
+        t_delta_inv, 
+    ];
+
+    let batch_proof_bytes = proof.batch_proof.as_ref()
         .ok_or_else(|| PCSError::InvalidProof("Missing batch proof".to_string()))?;
-    let kzg_proofs: Vec<Proof<E>> =
-        CanonicalDeserialize::deserialize_compressed(&mut &batch_proof_bytes[..]).map_err(|e| {
-            PCSError::InvalidProof(format!("Failed to deserialize batch proof: {:?}", e))
-        })?;
+    let kzg_proofs: Vec<Proof<E>> = CanonicalDeserialize::deserialize_compressed(&mut &batch_proof_bytes[..])
+        .map_err(|e| PCSError::InvalidProof(format!("Failed to deserialize batch proof: {:?}", e)))?;
 
-    let vk = VerifierKey {
-        g: verifier_param.g.clone(),
-        gamma_g: verifier_param.g.clone(), 
-        h: verifier_param.h.clone(),
-        beta_h: verifier_param.beta_h.clone(),
-        prepared_h: E::G2Prepared::from(verifier_param.h.clone()),
-        prepared_beta_h: E::G2Prepared::from(verifier_param.beta_h.clone()),
-    };
+   
+        let vk = VerifierKey {
+            g: verifier_param.g.clone(),
+            gamma_g: verifier_param.g.clone(), 
+            h: verifier_param.h.clone(),
+            beta_h: verifier_param.beta_h.clone(),
+            prepared_h: E::G2Prepared::from(verifier_param.h.clone()),
+            prepared_beta_h: E::G2Prepared::from(verifier_param.beta_h.clone()),
+        };
 
-    let mut rng = ChaCha8Rng::from_seed([0u8; 32]);
+        let mut rng = ChaCha8Rng::from_seed([0u8; 32]); 
 
-    let batch_result = KZG10::<E, DensePolynomial<E::ScalarField>>::batch_check(
-        &vk,
-        &batch_commitments,
-        &batch_points,
-        &batch_values,
-        &kzg_proofs,
-        &mut rng,
-    )
-    .map_err(|e| PCSError::InvalidProof(format!("KZG batch check failed: {:?}", e)))?;
+        let batch_result = KZG10::<E, DensePolynomial<E::ScalarField>>::batch_check(
+            &vk,
+            &batch_commitments,
+            &batch_points,
+            &batch_values,
+            &kzg_proofs,
+            &mut rng, 
+        ).map_err(|e| PCSError::InvalidProof(format!("KZG batch check failed: {:?}", e)))?;
 
     let result = batch_result;
+    println!("KZG 批量验证: {}", if result { "成功" } else { "失败" });
 
     let mu = z.len();
     let k = log2(m) as usize;
@@ -647,18 +712,26 @@ where
     let delta_m = delta.pow(&[m as u64]);
     let delta_m_1 = delta.pow(&[(m - 1) as u64]);
     let u_delta = p_delta * psi_delta_y - delta_m * h_delta - v_gamma * delta_m_1;
+    println!("u_verify{:?}", u_delta);
     let psi_hat_x = compute_psihat(z_y);
     let psi_delta_x = psi_hat_x.evaluate(&delta);
     let delta_l = delta.pow(&[l as u64]);
     let delta_l_1 = delta.pow(&[(l - 1) as u64]);
     let b_delta = v_delta * psi_delta_x - delta_l * a_delta - v * delta_l_1;
+    println!("b_delta{:?}",b_delta);
+    println!("u_delta{:?}",u_delta);
+    // println!("b_verify{:?}", b_delta);
     let rhs = delta_m1 * p_delta + beta * delta_m2 * u_delta + beta * beta * delta_l2 * b_delta;
-
+    println!("rhs = {}", rhs);
+    println!("t_delta_inv = {}", t_delta_inv);
     let mut res = false;
-    if t_delta_inv == rhs {
-        res = true;
-    }
 
+    if t_delta_inv != rhs {
+        println!("验证失败");
+    } else {
+        res = true;
+        println!("验证成功");
+    }
     end_timer!(verify_timer);
     Ok(res)
 }
@@ -677,7 +750,7 @@ mod tests {
         let mut rng = test_rng();
 
         // 测试不同变量数量（2 和 4）
-        for num_vars in [2, 4].iter() {
+        for num_vars in [2, 8].iter() {
             let miu = *num_vars as usize;
             println!("Testing SamaritanPCS with {} variables", miu);
 
@@ -698,6 +771,7 @@ mod tests {
 
             // 随机生成评估点
             let z: Vec<Fr> = (0..miu).map(|_| Fr::rand(&mut rng)).collect();
+            println!("z{:?}",z);
             let expected_eval = poly.evaluate(&z).expect("多项式评估失败");
             println!("Expected evaluation at z = {:?}", expected_eval);
 

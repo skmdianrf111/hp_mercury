@@ -571,153 +571,153 @@ mod tests {
         Ok(())
     }
 
-    // #[test]
-    // fn test_hyperplonk_Samaritan() -> Result<(), HyperPlonkErrors> {
-    //     let mock_gate = CustomizedGates::vanilla_plonk_gate();
+    #[test]
+    fn test_hyperplonk_Samaritan() -> Result<(), HyperPlonkErrors> {
+        let mock_gate = CustomizedGates::vanilla_plonk_gate();
 
-    //     test_hyperplonk_Sama::<Bls12_381>(mock_gate)
-    // }
+        test_hyperplonk_Sama::<Bls12_381>(mock_gate)
+    }
 
-    // fn test_hyperplonk_Sama<E: Pairing>(
-    //     mock_gate: CustomizedGates,
-    // ) -> Result<(), HyperPlonkErrors> {
-    //     let mut rng = test_rng();
-    //     let pcs_srs = SamaritanPCS::<E>::gen_srs_for_testing(&mut rng, 16)?;
+    fn test_hyperplonk_Sama<E: Pairing>(
+        mock_gate: CustomizedGates,
+    ) -> Result<(), HyperPlonkErrors> {
+        let mut rng = test_rng();
+        let pcs_srs = SamaritanPCS::<E>::gen_srs_for_testing(&mut rng, 16)?;
 
-    //     let num_constraints = 1 << 8;
-    //     let num_partitions = 2;
-    //     // let num_witness = 5;
-    //     // let degree = 4;
+        let num_constraints = 1 << 8;
+        let num_partitions = 2;
+        // let num_witness = 5;
+        // let degree = 4;
 
-    //     let partition_circuits = MockCircuit::<E::ScalarField>::partition_circuit::<StdRng>(
-    //         num_constraints,
-    //         &mock_gate,
-    //         num_partitions,
-    //     );
+        let partition_circuits = MockCircuit::<E::ScalarField>::partition_circuit::<StdRng>(
+            num_constraints,
+            &mock_gate,
+            num_partitions,
+        );
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
 
-    //     let (pk, vk) = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::preprocess(
-    //         &partition_circuits[0].index,
-    //         &pcs_srs,
-    //     )?;
+        let (pk, vk) = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::preprocess(
+            &partition_circuits[0].index,
+            &pcs_srs,
+        )?;
 
-    //     let (f_hats, perm_f_hats, f_hat_commitments, perm_f_commitments) =
-    //         <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::mul_prove(
-    //             &pk,
-    //             partition_circuits,
-    //         )?;
+        let (f_hats, perm_f_hats, f_hat_commitments, perm_f_commitments) =
+            <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::mul_prove(
+                &pk,
+                partition_circuits,
+            )?;
 
-    //     let sums = vec![E::ScalarField::zero(); f_hats.len()];
+        let sums = vec![E::ScalarField::zero(); f_hats.len()];
 
-    //     let (q_proof, q_sum, q_aux_info, fold_poly, fold_sum) =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::sum_fold(
-    //             f_hats.clone(),
-    //             sums,
-    //             &mut transcript,
-    //         )?;
+        let (q_proof, q_sum, q_aux_info, fold_poly, fold_sum) =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::sum_fold(
+                f_hats.clone(),
+                sums,
+                &mut transcript,
+            )?;
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
-    //         q_sum,
-    //         &q_proof,
-    //         &q_aux_info,
-    //         &mut transcript,
-    //     )?;
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
+            q_sum,
+            &q_proof,
+            &q_aux_info,
+            &mut transcript,
+        )?;
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let proof = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::prove(
-    //         &fold_poly.deep_copy(),
-    //         &mut transcript,
-    //     )?;
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let proof = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::prove(
+            &fold_poly.deep_copy(),
+            &mut transcript,
+        )?;
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
-    //         fold_sum,
-    //         &proof,
-    //         &fold_poly.aux_info,
-    //         &mut transcript,
-    //     )?;
-    //     assert!(
-    //         fold_poly.evaluate(&subclaim.point).unwrap() == subclaim.expected_evaluation,
-    //         "wrong subclaim f_hats"
-    //     );
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
+            fold_sum,
+            &proof,
+            &fold_poly.aux_info,
+            &mut transcript,
+        )?;
+        assert!(
+            fold_poly.evaluate(&subclaim.point).unwrap() == subclaim.expected_evaluation,
+            "wrong subclaim f_hats"
+        );
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let sums = vec![E::ScalarField::zero(); perm_f_hats.len()];
-    //     let (perm_q_proof, perm_q_sum, perm_q_aux_info, perm_fold_poly, perm_fold_sum) =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::sum_fold(
-    //             perm_f_hats.clone(),
-    //             sums,
-    //             &mut transcript,
-    //         )?;
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let sums = vec![E::ScalarField::zero(); perm_f_hats.len()];
+        let (perm_q_proof, perm_q_sum, perm_q_aux_info, perm_fold_poly, perm_fold_sum) =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::sum_fold(
+                perm_f_hats.clone(),
+                sums,
+                &mut transcript,
+            )?;
 
-    //     // 验证 perm_f_hats 的求和检查子声明
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let perm_subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
-    //         perm_q_sum,
-    //         &perm_q_proof,
-    //         &perm_q_aux_info,
-    //         &mut transcript,
-    //     )?;
+        // 验证 perm_f_hats 的求和检查子声明
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let perm_subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
+            perm_q_sum,
+            &perm_q_proof,
+            &perm_q_aux_info,
+            &mut transcript,
+        )?;
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let perm_proof = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::prove(
-    //         &perm_fold_poly.deep_copy(),
-    //         &mut transcript,
-    //     )?;
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let perm_proof = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::prove(
+            &perm_fold_poly.deep_copy(),
+            &mut transcript,
+        )?;
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let perm_subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
-    //         fold_sum,
-    //         &perm_proof,
-    //         &perm_fold_poly.aux_info,
-    //         &mut transcript,
-    //     )?;
-    //     assert!(
-    //         perm_fold_poly.evaluate(&perm_subclaim.point)? == perm_subclaim.expected_evaluation,
-    //         "wrong subclaim for perm_f_hats"
-    //     );
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let perm_subclaim = <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::verify(
+            fold_sum,
+            &perm_proof,
+            &perm_fold_poly.aux_info,
+            &mut transcript,
+        )?;
+        assert!(
+            perm_fold_poly.evaluate(&perm_subclaim.point)? == perm_subclaim.expected_evaluation,
+            "wrong subclaim for perm_f_hats"
+        );
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let (f_folded_evals, perm_folded_evals, batch_opening_proof) =
-    //         <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::prove(
-    //             f_hats.clone(),
-    //             perm_f_hats.clone(),
-    //             f_hat_commitments.clone(),
-    //             perm_f_commitments.clone(),
-    //             &q_proof,
-    //             &perm_q_proof,
-    //             &pk,
-    //             &mut transcript,
-    //         )?;
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let (f_folded_evals, perm_folded_evals, batch_opening_proof) =
+            <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::prove(
+                f_hats.clone(),
+                perm_f_hats.clone(),
+                f_hat_commitments.clone(),
+                perm_f_commitments.clone(),
+                &q_proof,
+                &perm_q_proof,
+                &pk,
+                &mut transcript,
+            )?;
 
-    //     let polys = vec![(f_hats, f_folded_evals), (perm_f_hats, perm_folded_evals)];
-    //     let commitments = [f_hat_commitments, perm_f_commitments].concat();
-    //     let q_proofs = vec![q_proof, perm_q_proof];
+        let polys = vec![(f_hats, f_folded_evals), (perm_f_hats, perm_folded_evals)];
+        let commitments = [f_hat_commitments, perm_f_commitments].concat();
+        let q_proofs = vec![q_proof, perm_q_proof];
 
-    //     let mut transcript =
-    //         <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
-    //     let is_valid = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::verify(
-    //         polys,
-    //         commitments,
-    //         q_proofs,
-    //         batch_opening_proof,
-    //         &vk,
-    //         &mut transcript,
-    //     )?;
+        let mut transcript =
+            <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
+        let is_valid = <PolyIOP<E::ScalarField> as HyperPlonkSNARK<E, SamaritanPCS<E>>>::verify(
+            polys,
+            commitments,
+            q_proofs,
+            batch_opening_proof,
+            &vk,
+            &mut transcript,
+        )?;
 
-    //     assert!(is_valid, "HyperPlonk verification failed");
+        assert!(is_valid, "HyperPlonk verification failed");
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
