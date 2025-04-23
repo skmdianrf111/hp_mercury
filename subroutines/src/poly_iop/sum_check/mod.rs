@@ -282,16 +282,16 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         let mut prover_msgs = Vec::with_capacity(length);
         let mut challenges = Vec::with_capacity(length);
         let mut eq_fix = eq_xr_poly.as_ref().clone();
+
+        let mut flattened_ml_extensions: Vec<DenseMultilinearExtension<F>> = compose_poly
+            .flattened_ml_extensions
+            .par_iter()
+            .map(|x| x.as_ref().clone())
+            .collect();
     
         for round in 0..length {
             // Start timer for this round
-            let round_timer = start_timer!(|| format!("sumcheck round {}", round));
-    
-            let mut flattened_ml_extensions: Vec<DenseMultilinearExtension<F>> = compose_poly
-                .flattened_ml_extensions
-                .par_iter()
-                .map(|x| x.as_ref().clone())
-                .collect();
+            let round_timer = start_timer!(|| format!("sumfold round {}", round));
     
             if let Some(chal) = challenge {
                 if round == 0 {
@@ -406,12 +406,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
                     .zip(sum.iter().chain(extrapolation.iter()))
                     .for_each(|(products_sum, sum)| *products_sum += sum);
             });
-    
-            // update prover's state to the partial evaluated polynomial
-            compose_poly.flattened_ml_extensions = flattened_ml_extensions
-                .par_iter()
-                .map(|x| Arc::new(x.clone()))
-                .collect();
     
             let message = IOPProverMessage {
                 evaluations: products_sum,

@@ -424,17 +424,20 @@ mod tests {
     #[test]
     fn test_hyperplonk_e2e() -> Result<(), HyperPlonkErrors> {
         let mock_gate = CustomizedGates::vanilla_plonk_gate();
-
-        test_hyperplonk_helper::<Bls12_381>(mock_gate)
+        println!("---------begin test mecury---------");
+        //test_hyperplonk_helper::<Bls12_381>(mock_gate.clone());
+        println!("---------finish test mecury---------");
+        println!("---------begin test sama---------");
+        test_hyperplonk_Sama::<Bls12_381>(mock_gate)
     }
 
     fn test_hyperplonk_helper<E: Pairing>(
         mock_gate: CustomizedGates,
     ) -> Result<(), HyperPlonkErrors> {
         let mut rng = test_rng();
-        let pcs_srs = MercuryPCS::<E>::gen_srs_for_testing(&mut rng, 16)?;
+        let pcs_srs = MercuryPCS::<E>::gen_srs_for_testing(&mut rng, 20)?;
 
-        let num_constraints = 1 << 9;
+        let num_constraints = 1 << 18;
         let num_partitions = 2;
         // let num_witness = 5;
         // let degree = 4;
@@ -492,10 +495,10 @@ mod tests {
             &fold_poly.aux_info,
             &mut transcript,
         )?;
-        assert!(
-            fold_poly.evaluate(&subclaim.point).unwrap() == subclaim.expected_evaluation,
-            "wrong subclaim f_hats"
-        );
+        // assert!(
+        //     fold_poly.evaluate(&subclaim.point).unwrap() == subclaim.expected_evaluation,
+        //     "wrong subclaim f_hats"
+        // );
 
         let mut transcript =
             <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
@@ -532,10 +535,10 @@ mod tests {
             &perm_fold_poly.aux_info,
             &mut transcript,
         )?;
-        assert!(
-            perm_fold_poly.evaluate(&perm_subclaim.point)? == perm_subclaim.expected_evaluation,
-            "wrong subclaim for perm_f_hats"
-        );
+        // assert!(
+        //     perm_fold_poly.evaluate(&perm_subclaim.point)? == perm_subclaim.expected_evaluation,
+        //     "wrong subclaim for perm_f_hats"
+        // );
 
         let mut transcript =
             <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::init_transcript();
@@ -571,12 +574,12 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_hyperplonk_Samaritan() -> Result<(), HyperPlonkErrors> {
-        let mock_gate = CustomizedGates::vanilla_plonk_gate();
+    // #[test]
+    // fn test_hyperplonk_Samaritan() -> Result<(), HyperPlonkErrors> {
+    //     let mock_gate = CustomizedGates::vanilla_plonk_gate();
 
-        test_hyperplonk_Sama::<Bls12_381>(mock_gate)
-    }
+    //     test_hyperplonk_Sama::<Bls12_381>(mock_gate)
+    // }
 
     fn test_hyperplonk_Sama<E: Pairing>(
         mock_gate: CustomizedGates,

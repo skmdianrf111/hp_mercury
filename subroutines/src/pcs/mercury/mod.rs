@@ -1,3 +1,4 @@
+#![feature(isqrt)]
 pub(crate) mod srs;
 
 pub(crate) mod util;
