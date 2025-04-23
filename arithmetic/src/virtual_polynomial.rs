@@ -368,13 +368,11 @@ pub fn eq_eval<F: PrimeField>(x: &[F], y: &[F]) -> Result<F, ArithErrors> {
             "x and y have different length".to_string(),
         ));
     }
-
     let mut res = F::one();
     for (&xi, &yi) in x.iter().zip(y.iter()) {
         let xi_yi = xi * yi;
         res *= xi_yi + xi_yi - xi - yi + F::one();
     }
-
     Ok(res)
 }
 
