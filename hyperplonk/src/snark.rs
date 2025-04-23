@@ -118,13 +118,15 @@ where
         ),
         HyperPlonkErrors,
     > {
+        let mul_prove= Instant::now();
         let mut transcript = IOPTranscript::<E::ScalarField>::new(b"mul_prove");
-
         let mut f_hats = Vec::new();
         let mut perm_f_hats = Vec::new();
         let mut f_commitments = Vec::new();
         let mut perm_f_commitments = Vec::new();
         let mut duration_wit = Duration::from_secs(0);
+        let mut duration_f_hat = Duration::from_secs(0);
+        let mut duration_perm_hat = Duration::from_secs(0);
         for (i, circuit) in circuits.iter().enumerate() {
             let pub_input = &circuit.public_inputs;
             let witness = circuit.witnesses.clone();
@@ -153,7 +155,7 @@ where
                 &witness_polys,
             )?;
             let f_hat = <Self as ZeroCheck<E::ScalarField>>::mul_prove(&fx, &mut transcript)?;
-
+            let f_hat_start= Instant::now();
             let f_hat_comms: Vec<PCS::Commitment> = f_hat
                 .flattened_ml_extensions
                 .iter()
@@ -164,6 +166,7 @@ where
             }
             f_hats.push(f_hat);
             f_commitments.push(f_hat_comms);
+            duration_f_hat += f_hat_start.elapsed();
 
             let (perm_check_proof, prod_poly, frac_poly, perm_f_hat) =
                 <Self as PermutationCheck<E, PCS>>::prove(
@@ -175,11 +178,13 @@ where
                 )
                 .map_err(|e| HyperPlonkErrors::from(e))?;
 
+            
             let prod_comm = PCS::commit(&pk.pcs_param, &prod_poly)?;
             let frac_comm = PCS::commit(&pk.pcs_param, &frac_poly)?;
             transcript.append_serializable_element(b"prod_poly", &prod_comm)?;
             transcript.append_serializable_element(b"frac_poly", &frac_comm)?;
-
+            
+            let perm_com_start= Instant::now();
             let perm_f_hat_comms: Vec<PCS::Commitment> = perm_f_hat
                 .flattened_ml_extensions
                 .iter()
@@ -190,9 +195,10 @@ where
             }
             perm_f_hats.push(perm_f_hat);
             perm_f_commitments.push(perm_f_hat_comms);
-
+            duration_perm_hat += perm_com_start.elapsed();
         }
-
+        let mul_prove_duration = mul_prove.elapsed() - duration_f_hat-duration_perm_hat -duration_wit;
+        println!("----------------- mul_prove Duration ----------------------{:?}",mul_prove_duration);
         Ok((f_hats, perm_f_hats, f_commitments, perm_f_commitments, duration_wit))
     }
 
@@ -462,7 +468,7 @@ mod tests {
                 partition_circuits,
             )?;
         let duration_com = duration_sel + duration_wit;
-        println!("-----------------Commit Mercury Duration{:?}",duration_com);
+        println!("-----------------Commit Mercury Duration {:?}",duration_com);
         let sums = vec![E::ScalarField::zero(); f_hats.len()];
 
         let start = Instant::now();
