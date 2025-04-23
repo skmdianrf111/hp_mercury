@@ -420,7 +420,7 @@ mod tests {
     fn test_hyperplonk_e2e() -> Result<(), HyperPlonkErrors> {
         let mock_gate = CustomizedGates::vanilla_plonk_gate();
         println!("---------begin test mecury---------");
-        //test_hyperplonk_helper::<Bls12_381>(mock_gate.clone());
+        test_hyperplonk_helper::<Bls12_381>(mock_gate.clone());
         println!("---------finish test mecury---------");
         println!("---------begin test sama---------");
         test_hyperplonk_Sama::<Bls12_381>(mock_gate)

@@ -1,4 +1,3 @@
-#![feature(isqrt)]
 pub(crate) mod srs;
 
 pub(crate) mod util;
@@ -8,6 +7,7 @@ use std::collections::BTreeMap;
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::{Deref, Mul, Neg};
+use std::ptr::hash;
 use std::sync::Arc;
 use crate::pcs::{
     prelude::Commitment, PCSError, PolynomialCommitmentScheme, StructuredReferenceString
@@ -18,7 +18,7 @@ use ark_ec::{
 use ark_ff::{Field, One, PrimeField, Zero};
 use ark_poly::{DenseMultilinearExtension, univariate::DensePolynomial, DenseUVPolynomial, Polynomial, MultilinearExtension};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{end_timer, log2, start_timer, test_rng,  rand::Rng};
+use ark_std::{log2,test_rng,  rand::Rng};
 use transcript::IOPTranscript;
 use crate::{BatchProof, PolyIOP, SumCheck};
 use util::{split_u, partial_sum, compute_folded_g_and_q};
@@ -94,9 +94,15 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             },
         };
 
-        // multilinear 对应的 univariate 的 max_degree
-        let uni_degree:usize = 1 << supported_num_vars;
-        srs.borrow().trim(uni_degree)
+        /// multilinear 对应的 univariate 的 max_degree
+        if supported_num_vars % 2 == 1 {
+            let uni_degree:usize = 1 << (supported_num_vars + 1);
+            srs.borrow().trim(uni_degree)
+        }
+        else{
+            let uni_degree:usize = 1 << supported_num_vars;
+            srs.borrow().trim(uni_degree)
+        }
     }
 
     /// Generate a commitment for a polynomial.
@@ -109,9 +115,10 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         poly: &Self::Polynomial,
     ) -> Result<Self::Commitment, PCSError> {
         let prover_param = prover_param.borrow();
-        let commit_timer = start_timer!(|| "commit");
 
-        let f_poly = DensePolynomial::from_coefficients_vec(poly.evaluations.to_vec());
+        let poly1_padded = pad_mle_to_even_vars::<E>(&poly);
+        let f_poly = DensePolynomial::from_coefficients_vec(poly1_padded.evaluations.to_vec());
+
 
         if f_poly.degree() >= prover_param.powers_of_g.len() {
             return Err(PCSError::InvalidParameters(format!(
@@ -123,13 +130,10 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&f_poly);
 
-        let msm_time = start_timer!(|| "MSM to compute commitment to plaintext poly");
         let commitment =
             E::G1::msm_unchecked(&prover_param.powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
 
-        end_timer!(commit_timer);
         Ok(Commitment(commitment))
     }
 
@@ -147,8 +151,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         polynomial: &Self::Polynomial,
         point: &Self::Point,
     ) -> Result<(Self::Proof, Self::Evaluation), PCSError> {
-        let open_timer = start_timer!(|| format!("open mle with {} variable", polynomial.num_vars));
-        let f_poly = DensePolynomial::from_coefficients_vec(polynomial.evaluations.to_vec());
+     
 
         if polynomial.num_vars() != point.len() {
             return Err(PCSError::InvalidParameters(format!(
@@ -157,6 +160,11 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
                 point.len()
             )));
         }
+
+        let (poly1_padded,point) = pad_mle_to_even_vars_and_point::<E>(&polynomial,&point);
+
+        let f_poly = DensePolynomial::from_coefficients_vec(poly1_padded.evaluations.to_vec());
+
 
         if f_poly.degree() >= prover_param.borrow().powers_of_g.len() {
             return Err(PCSError::InvalidParameters(format!(
@@ -174,10 +182,9 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         // 1. h(X)
         let h_poly = partial_sum(&f_poly, &u1);
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&h_poly);
-        let msm_time = start_timer!(|| "MSM to compute commitment to h(X)");
+
         let com_h =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs).into();
-        end_timer!(msm_time);
 
         let mut transcript = IOPTranscript::<E::ScalarField>::new(b"HyperPlonkProtocol");
         let mut buf = Vec::new();
@@ -191,18 +198,18 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
 
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&g_poly);
-        let msm_time = start_timer!(|| "MSM to compute commitment to g(X)");
+
         let com_g =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
+  
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&q_poly);
-        let msm_time = start_timer!(|| "MSM to compute commitment to q(X)");
+
         let com_q =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
+
 
         let mut buf_g = Vec::new();
         com_g.serialize_compressed(&mut buf_g).unwrap(); // 序列化为字节
@@ -218,18 +225,18 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let s_poly = compute_s(&g_poly, &h_poly, &u1, &u2, gamma, b);
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&s_poly);
-        let msm_time = start_timer!(|| "MSM to compute commitment to S(X)");
+
         let com_s =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
+
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&d_poly);
-        let msm_time = start_timer!(|| "MSM to compute commitment to D(X)");
+       
         let com_d =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
+
 
         let mut buf_s = Vec::new();
         com_s.serialize_compressed(&mut buf_s).unwrap(); // 序列化为字节
@@ -255,11 +262,11 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let big_h_poly = compute_big_h(&f_poly, &q_poly, z, b, alpha, g_z);
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&big_h_poly);
-        let msm_time = start_timer!(|| "MSM to compute commitment to H(X)");
+
         let com_big_h =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
+
 
         let mut buf_big_h = Vec::new();
         com_big_h.serialize_compressed(&mut buf_big_h).unwrap(); // 序列化为字节
@@ -302,11 +309,11 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let batch_w = compute_batch_w(batch_f, t.clone());
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&batch_w);
-        let msm_time = start_timer!(|| "MSM to compute commitment to batch_w(X)");
+   
         let com_batch_w =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
+
 
         let mut buf_batch_w = Vec::new();
         com_batch_w.serialize_compressed(&mut buf_batch_w).unwrap(); // 序列化为字节
@@ -317,11 +324,10 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let batch_w_hat = compute_batch_w_hat(batch_l, batch_z);
 
         let (num_leading_zeros, plain_coeffs) = skip_leading_zeros(&batch_w_hat);
-        let msm_time = start_timer!(|| "MSM to compute commitment to batch_w_hat(X)");
+     
         let com_batch_w_hat =
             E::G1::msm_unchecked(&prover_param.borrow().powers_of_g[num_leading_zeros..], plain_coeffs)
                 .into();
-        end_timer!(msm_time);
 
 
         let proofs = vec![com_h, com_g, com_q, com_s, com_d, com_big_h, com_batch_w, com_batch_w_hat];
@@ -336,9 +342,8 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             b,
         };
 
-        let eval = evaluate_opt(polynomial, point);
-
-        end_timer!(open_timer);
+        let eval = evaluate_opt(&poly1_padded, &point.as_slice());
+      
         Ok((proof, eval))
     }
 
@@ -351,7 +356,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         evals: &[Self::Evaluation],
         transcript: &mut IOPTranscript<E::ScalarField>,
     ) -> Result<BatchProof<E, Self>, PCSError> {
-        let open_timer = start_timer!(|| format!("multi open {} points", points.len()));
+   
         for eval_point in points.iter() {
             transcript.append_serializable_element(b"eval_point", eval_point)?;
         }
@@ -371,7 +376,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let eq_t_i_list = build_eq_x_r_vec(t.as_ref())?;
 
         // \tilde g_i(b) = eq(t, i) * f_i(b)
-        let timer = start_timer!(|| format!("compute tilde g for {} points", points.len()));
+
         // combine the polynomials that have same opening point first to reduce the
         // cost of sum check later.
         let point_indices = points
@@ -400,9 +405,8 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
                     merged_tilde_gs
                 },
             );
-        end_timer!(timer);
+ 
 
-        let timer = start_timer!(|| format!("compute tilde eq for {} points", points.len()));
         let tilde_eqs: Vec<_> = deduped_points
             .iter()
             .map(|point| {
@@ -412,17 +416,15 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
                 ))
             })
             .collect();
-        end_timer!(timer);
+ 
 
         // built the virtual polynomial for SumCheck
-        let timer = start_timer!(|| format!("sum check prove of {} variables", num_var));
 
-        let step = start_timer!(|| "add mle");
         let mut sum_check_vp = VirtualPolynomial::new(num_var);
         for (merged_tilde_g, tilde_eq) in merged_tilde_gs.iter().zip(tilde_eqs.into_iter()) {
             sum_check_vp.add_mle_list([merged_tilde_g.clone(), tilde_eq], E::ScalarField::one())?;
         }
-        end_timer!(step);
+
 
         let proof = match <PolyIOP<E::ScalarField> as SumCheck<E::ScalarField>>::prove(
             &sum_check_vp,
@@ -437,29 +439,25 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             },
         };
 
-        end_timer!(timer);
+
 
         // a2 := sumcheck's point
         let a2 = &proof.point[..num_var];
 
         // build g'(X) = \sum_i=1..k \tilde eq_i(a2) * \tilde g_i(X) where (a2) is the
         // sumcheck's point \tilde eq_i(a2) = eq(a2, point_i)
-        let step = start_timer!(|| "evaluate at a2");
+  
         let mut g_prime = Arc::new(DenseMultilinearExtension::zero());
         for (merged_tilde_g, point) in merged_tilde_gs.iter().zip(deduped_points.iter()) {
             let eq_i_a2 = eq_eval(a2, point)?;
             *Arc::make_mut(&mut g_prime) += (eq_i_a2, merged_tilde_g.deref());
         }
-        end_timer!(step);
 
-        let step = start_timer!(|| "pcs open");
+
+ 
         let (g_prime_proof, _g_prime_eval) = Self::open(prover_param, &g_prime, a2.to_vec().as_ref())?;
         // assert_eq!(g_prime_eval, tilde_g_eval);
-        end_timer!(step);
-
-        let step = start_timer!(|| "evaluate fi(pi)");
-        end_timer!(step);
-        end_timer!(open_timer);
+   
 
         Ok(BatchProof {
             sum_check_proof: proof,
@@ -481,8 +479,9 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         value: &E::ScalarField,
         proof: &Self::Proof,
     ) -> Result<bool, PCSError> {
-        let check_time = start_timer!(|| "verify");
-        let cha_time = start_timer!(|| "generate challenge");
+     
+
+        let point = pad_point_to_even::<E>(&point);
 
         let mut transcript = IOPTranscript::<E::ScalarField>::new(b"HyperPlonkProtocol");
         let com_h = proof.proofs[0];
@@ -553,10 +552,8 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
 
         let batch_z: E::ScalarField = transcript.get_and_append_challenge(b"batch_z")?;
 
-        end_timer!(cha_time);
-
         // 0. step c
-        let cha_time = start_timer!(|| "step c");
+    
         let exponent = (b - 1) as u64;
         let d_z_v = z.pow([exponent]) * g_hat_z;
 
@@ -567,10 +564,10 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let d_acc = d_z_v == proof.d_value[0];
         let h_acc = h_alpha == h_a ;
 
-        end_timer!(cha_time);
+   
 
         // 1. step f
-        let cha_time = start_timer!(|| "step f");
+      
         let z_b = z.pow([b as u64]);
         let z_b_alpha = z_b - alpha;
         let comm = commitment.0;
@@ -598,11 +595,11 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             ],
         ).0.is_one();
 
-        end_timer!(cha_time);
+
 
 
         // 2. step g
-        let cha_time = start_timer!(|| "step g");
+     
         let g_points = vec![z, z_inverse];
         let g_values = &proof.g_value;
         let rr_g = generate_r_i(&g_points, &g_values);
@@ -658,12 +655,12 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             ],
         ).0.is_one();
 
-        end_timer!(cha_time);
+
 
 
         let all_pass = step_f && step_g && d_acc && h_acc;
 
-        end_timer!(check_time, || format!("Result: {}", all_pass));
+
         Ok(all_pass)
     }
 
@@ -676,7 +673,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         batch_proof: &Self::BatchProof,
         transcript: &mut IOPTranscript<E::ScalarField>,
     ) -> Result<bool, PCSError> {
-        let open_timer = start_timer!(|| "batch verification");
+    
         for eval_point in points.iter() {
             transcript.append_serializable_element(b"eval_point", eval_point)?;
         }
@@ -697,7 +694,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let a2 = &batch_proof.sum_check_proof.point[..num_var];
 
         // build g' commitment
-        let step = start_timer!(|| "build homomorphic commitment");
+   
         let eq_t_list = build_eq_x_r_vec(t.as_ref())?;
 
         let mut scalars = vec![];
@@ -709,7 +706,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             bases.push(commitments[i].0);
         }
         let g_prime_commit = E::G1::msm_unchecked(&bases, &scalars);
-        end_timer!(step);
+     
 
         // ensure \sum_i eq(t, <i>) * f_i_evals matches the sum via SumCheck
         let mut sum = E::ScalarField::zero();
@@ -746,7 +743,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
             &batch_proof.g_prime_proof,
         )?;
 
-        end_timer!(open_timer);
+    
         Ok(res)
     }
 }
@@ -759,6 +756,49 @@ fn skip_leading_zeros<F: PrimeField, P: DenseUVPolynomial<F>>(p: &P) -> (usize, 
     (num_leading_zeros, &p.coeffs()[num_leading_zeros..])
 }
 
+fn pad_mle_to_even_vars<E: Pairing>(
+    mle: &Arc<DenseMultilinearExtension<E::ScalarField>>
+) -> Arc<DenseMultilinearExtension<E::ScalarField>> {
+    let num_vars = mle.num_vars;
+    if num_vars % 2 == 0 {
+        return mle.clone();
+    }
+
+    let mut evals = mle.evaluations.to_vec();
+    evals.extend(evals.clone()); // 复制一份，多一个变量相当于 evaluation 翻倍
+
+    Arc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars + 1, evals))
+}
+
+fn pad_mle_to_even_vars_and_point<E: Pairing>(
+    mle: &Arc<DenseMultilinearExtension<E::ScalarField>>,
+    points: &[E::ScalarField],
+) -> (Arc<DenseMultilinearExtension<E::ScalarField>>, Vec<E::ScalarField>) {
+    let num_vars = mle.num_vars;
+    if num_vars % 2 == 0 {
+        return (mle.clone(), points.to_vec());
+    }
+
+    let mut evals = mle.evaluations.to_vec();
+    evals.extend(evals.clone()); // 复制一份，多一个变量相当于 evaluation 翻倍
+    let mut new_point = points.clone().to_vec();
+    new_point.push(E::ScalarField::zero());
+
+    (Arc::new(DenseMultilinearExtension::from_evaluations_vec(num_vars + 1, evals)), new_point)
+}
+
+fn pad_point_to_even<E: Pairing>(
+    points: &[E::ScalarField]
+) -> Vec<E::ScalarField> {
+    let num_vars = points.len();
+    if num_vars % 2 == 0 {
+        return points.to_vec();
+    }
+
+    let mut new_point = points.clone().to_vec();
+    new_point.push(E::ScalarField::zero());
+    new_point
+}
 
 
 #[cfg(test)]
@@ -820,6 +860,19 @@ mod tests {
     }
 
     #[test]
+    fn test_odd()-> Result<(), PCSError> {
+        let mut rng = test_rng();
+        let params = MercuryPCS::<E>::gen_srs_for_testing(&mut rng, 11)?;
+        // normal polynomials
+        let poly1:Arc<DenseMultilinearExtension<Fr>> =Arc::new(DenseMultilinearExtension::rand(11, &mut rng));
+        // println!("Poly: {:?}", poly1.evaluations.to_vec());
+        // println!("  ");
+        test_single_helper(&params, &poly1, &mut rng)?;
+
+        Ok(())
+    }
+
+    #[test]
     fn test_mercury() -> Result<(), PCSError> {
         let mut rng = test_rng();
         let mut mer_setup = Duration::new(0, 0);
@@ -840,22 +893,22 @@ mod tests {
         for _ in 0..10 {
             let poly1 = Arc::new(DenseMultilinearExtension::rand(8, &mut rng));
 
-            let start_mer_setup = Instant::now();
+     
             let params = MercuryPCS::<E>::gen_srs_for_testing(&mut rng, 8)?;
-            mer_setup += start_mer_setup.elapsed();
+      
 
             let nv = poly1.num_vars();
             assert_ne!(nv, 0);
             let (ck, vk) = MercuryPCS::trim(params, None, Some(nv))?;
             let point: Vec<_> = (0..nv).map(|_| Fr::rand(&mut rng)).collect();
 
-            let start_mer_com = Instant::now();
+        
             let com= MercuryPCS::<E>::commit(&ck, &poly1)?;
-            mer_com += start_mer_com.elapsed();
+    
 
-            let start_mer_open = Instant::now();
+
             let (proof,value) = MercuryPCS::<E>::open(&ck, &poly1,  &point)?;
-            mer_open += start_mer_open.elapsed();
+           
 
             let start_mer_ver = Instant::now();
             // let value = evaluate_opt(&poly1, &point);

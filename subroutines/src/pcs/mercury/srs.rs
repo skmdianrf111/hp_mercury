@@ -2,7 +2,7 @@ use crate::pcs::{PCSError, StructuredReferenceString};
 use ark_ec::{pairing::Pairing, scalar_mul::fixed_base::FixedBase, AffineRepr, CurveGroup};
 use ark_ff::PrimeField;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use ark_std::{end_timer, rand::Rng, start_timer, vec, vec::Vec, One, UniformRand};
+use ark_std::{ rand::Rng,  vec, vec::Vec, One, UniformRand};
 use derivative::Derivative;
 use std::ops::Mul;
 
@@ -95,8 +95,12 @@ impl<E: Pairing> StructuredReferenceString<E> for MercuryUniversalParams<E> {
     /// WARNING: THIS FUNCTION IS FOR TESTING PURPOSE ONLY.
     /// THE OUTPUT SRS SHOULD NOT BE USED IN PRODUCTION.
     fn gen_srs_for_testing<R: Rng>(rng: &mut R, max_degree: usize) -> Result<Self, PCSError> {
-        let setup_time = start_timer!(|| format!("Mercury::Setup with degree {}", max_degree));
+ 
         /// isomorphic univariate degree = 1 << num_var;
+        let mut max_degree = max_degree;
+        if max_degree % 2 == 1 {
+            max_degree = max_degree + 1;
+        }
         let max_degree = 1 << max_degree;
         let beta = E::ScalarField::rand(rng);
         let g = E::G1::rand(rng);
@@ -113,12 +117,12 @@ impl<E: Pairing> StructuredReferenceString<E> for MercuryUniversalParams<E> {
         let window_size = FixedBase::get_mul_window_size(max_degree + 1);
 
         let scalar_bits = E::ScalarField::MODULUS_BIT_SIZE as usize;
-        let g_time = start_timer!(|| "Generating powers of G");
+   
         // TODO: parallelization
         let g_table = FixedBase::get_window_table(scalar_bits, window_size, g);
         let powers_of_g =
             FixedBase::msm::<E::G1>(scalar_bits, window_size, &g_table, &powers_of_beta);
-        end_timer!(g_time);
+   
 
         let powers_of_g = E::G1::normalize_batch(&powers_of_g);
 
@@ -130,7 +134,6 @@ impl<E: Pairing> StructuredReferenceString<E> for MercuryUniversalParams<E> {
             h,
             beta_h,
         };
-        end_timer!(setup_time);
         Ok(pp)
     }
 }
