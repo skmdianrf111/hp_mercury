@@ -1,3 +1,4 @@
+#![feature(isqrt)]
 use ark_ec::pairing::Pairing;
 use ark_ff::{ One, Zero};
 

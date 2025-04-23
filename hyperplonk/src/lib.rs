@@ -6,6 +6,8 @@
 
 //! Main module for the HyperPlonk SNARK.
 
+use std::time::Duration;
+
 use ark_ec::pairing::Pairing;
 use errors::HyperPlonkErrors;
 use subroutines::{pcs::prelude::PolynomialCommitmentScheme, poly_iop::prelude::PermutationCheck,IOPProof};
@@ -80,6 +82,7 @@ where
             Vec<VirtualPolynomial<E::ScalarField>>,
             Vec<Vec<PCS::Commitment>>,
             Vec<Vec<PCS::Commitment>>, 
+            Duration
         ),
         HyperPlonkErrors,
     >;

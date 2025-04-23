@@ -10,7 +10,6 @@ use crate::poly_iop::{errors::PolyIOPErrors, structs::IOPProof, zero_check::Zero
 use arithmetic::{get_index, VirtualPolynomial};
 use ark_ff::{batch_inversion, PrimeField};
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{end_timer, start_timer};
 use std::sync::Arc;
 use transcript::IOPTranscript;
 
@@ -23,8 +22,6 @@ pub(super) fn compute_frac_poly<F: PrimeField>(
     fxs: &[Arc<DenseMultilinearExtension<F>>],
     gxs: &[Arc<DenseMultilinearExtension<F>>],
 ) -> Result<Arc<DenseMultilinearExtension<F>>, PolyIOPErrors> {
-    let start = start_timer!(|| "compute frac(x)");
-
     let mut f_evals = vec![F::one(); 1 << fxs[0].num_vars];
     for fx in fxs.iter() {
         for (f_eval, fi) in f_evals.iter_mut().zip(fx.iter()) {
@@ -48,7 +45,6 @@ pub(super) fn compute_frac_poly<F: PrimeField>(
         *f_eval *= g_eval;
     }
 
-    end_timer!(start);
     Ok(Arc::new(DenseMultilinearExtension::from_evaluations_vec(
         fxs[0].num_vars,
         f_evals,
@@ -65,7 +61,7 @@ pub(super) fn compute_frac_poly<F: PrimeField>(
 pub(super) fn compute_product_poly<F: PrimeField>(
     frac_poly: &Arc<DenseMultilinearExtension<F>>,
 ) -> Result<Arc<DenseMultilinearExtension<F>>, PolyIOPErrors> {
-    let start = start_timer!(|| "compute evaluations of prod polynomial");
+
     let num_vars = frac_poly.num_vars;
     let frac_evals = &frac_poly.evaluations;
 
@@ -102,7 +98,7 @@ pub(super) fn compute_product_poly<F: PrimeField>(
 
     // prod(1, 1, ..., 1) := 0
     prod_x_evals.push(F::zero());
-    end_timer!(start);
+
 
     Ok(Arc::new(DenseMultilinearExtension::from_evaluations_vec(
         num_vars,
@@ -127,7 +123,6 @@ pub(super) fn prove_zero_check<F: PrimeField>(
     alpha: &F,
     transcript: &mut IOPTranscript<F>,
 ) -> Result<(VirtualPolynomial<F>, VirtualPolynomial<F>), PolyIOPErrors> {
-    let start = start_timer!(|| "zerocheck in product check");
     let num_vars = frac_poly.num_vars;
 
     let mut p1_evals = vec![F::zero(); 1 << num_vars];
@@ -158,6 +153,6 @@ pub(super) fn prove_zero_check<F: PrimeField>(
 
     let f_hat= <PolyIOP<F> as ZeroCheck<F>>::mul_prove(&q_x, transcript)?;
 
-    end_timer!(start);
+
     Ok((f_hat, q_x))
 }

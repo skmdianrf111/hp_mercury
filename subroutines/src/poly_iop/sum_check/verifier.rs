@@ -13,7 +13,6 @@ use crate::poly_iop::{
 };
 use arithmetic::VPAuxInfo;
 use ark_ff::PrimeField;
-use ark_std::{end_timer, start_timer};
 use transcript::IOPTranscript;
 
 #[cfg(feature = "parallel")]
@@ -28,7 +27,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
 
     /// Initialize the verifier's state.
     fn verifier_init(index_info: &Self::VPAuxInfo) -> Self {
-        let start = start_timer!(|| "sum check verifier init");
         let res = Self {
             round: 1,
             num_vars: index_info.num_variables,
@@ -37,7 +35,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
             polynomials_received: Vec::with_capacity(index_info.num_variables),
             challenges: Vec::with_capacity(index_info.num_variables),
         };
-        end_timer!(start);
         res
     }
 
@@ -52,8 +49,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
         prover_msg: &Self::ProverMessage,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::Challenge, PolyIOPErrors> {
-        let start =
-            start_timer!(|| format!("sum check verify {}-th round and update state", self.round));
 
         if self.finished {
             return Err(PolyIOPErrors::InvalidVerifier(
@@ -82,7 +77,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
             self.round += 1;
         }
 
-        end_timer!(start);
         Ok(challenge)
     }
 
@@ -98,7 +92,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
         &self,
         asserted_sum: &F,
     ) -> Result<Self::SumCheckSubClaim, PolyIOPErrors> {
-        let start = start_timer!(|| "sum check check and generate subclaim");
         if !self.finished {
             return Err(PolyIOPErrors::InvalidVerifier(
                 "Incorrect verifier state: Verifier has not finished.".to_string(),
@@ -166,7 +159,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
                 ));
             }
         }
-        end_timer!(start);
         Ok(SumCheckSubClaim {
             point: self.challenges.clone(),
             // the last expected value (not checked within this function) will be included in the
@@ -187,8 +179,6 @@ impl<F: PrimeField> SumCheckVerifier<F> for IOPVerifierState<F> {
 /// TODO: The quadratic term can be removed by precomputing the lagrange
 /// coefficients.
 fn interpolate_uni_poly<F: PrimeField>(p_i: &[F], eval_at: F) -> Result<F, PolyIOPErrors> {
-    let start = start_timer!(|| "sum check interpolate uni poly opt");
-
     let len = p_i.len();
     let mut evals = vec![];
     let mut prod = eval_at;
@@ -282,7 +272,6 @@ fn interpolate_uni_poly<F: PrimeField>(p_i: &[F], eval_at: F) -> Result<F, PolyI
             }
         }
     }
-    end_timer!(start);
     Ok(res)
 }
 

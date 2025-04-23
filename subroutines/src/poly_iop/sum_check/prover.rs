@@ -14,7 +14,7 @@ use crate::poly_iop::{
 use arithmetic::{fix_variables, VirtualPolynomial};
 use ark_ff::{batch_inversion, PrimeField};
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{cfg_into_iter, end_timer, start_timer, vec::Vec};
+use ark_std::{cfg_into_iter,vec::Vec};
 use rayon::prelude::{IntoParallelIterator, IntoParallelRefIterator};
 use std::sync::Arc;
 
@@ -28,13 +28,11 @@ impl<F: PrimeField> SumCheckProver<F> for IOPProverState<F> {
     /// Initialize the prover state to argue for the sum of the input polynomial
     /// over {0,1}^`num_vars`.
     fn prover_init(polynomial: &Self::VirtualPolynomial) -> Result<Self, PolyIOPErrors> {
-        let start = start_timer!(|| "sum check prover init");
         if polynomial.aux_info.num_variables == 0 {
             return Err(PolyIOPErrors::InvalidParameters(
                 "Attempt to prove a constant.".to_string(),
             ));
         }
-        end_timer!(start);
 
         Ok(Self {
             challenges: Vec::with_capacity(polynomial.aux_info.num_variables),

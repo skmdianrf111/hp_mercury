@@ -6,23 +6,24 @@
 
 //! Useful utilities for KZG PCS
 use ark_ec::pairing::Pairing;
-use ark_ff::{Field, One, PrimeField, Zero};
+use ark_ff::{Field, PrimeField, Zero};
 use ark_poly::{
     univariate::DensePolynomial, DenseMultilinearExtension, DenseUVPolynomial,
     MultilinearExtension, Polynomial,
 };
 use ark_ec::{
-    scalar_mul::variable_base::VariableBaseMSM, AffineRepr, CurveGroup,
+    scalar_mul::variable_base::VariableBaseMSM, AffineRepr, 
 };
-use crate::pcs::Samaritan::srs::{SamaritanProverParam, SamaritanUniversalParams, SamaritanVerifierParam};
-use ark_poly_commit::kzg10::{Powers, Randomness, UniversalParams, KZG10};
-use ark_std::{end_timer, start_timer, vec::Vec};
-use ark_std::{format, log2, string::ToString, test_rng, vec};
-use std::{borrow::Cow, collections::HashMap};
+
+use crate::pcs::Samaritan::srs::SamaritanProverParam;
+use ark_std::vec::Vec;
+use ark_std::{log2, string::ToString, test_rng, vec};
+use std:: collections::HashMap;
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
 use crate::PCSError;
 use crate::pcs::structs::Commitment;
 use ark_poly_commit::kzg10::Proof;
+
 
 type MultiPoly<F> = HashMap<(usize, usize), F>;
 
@@ -31,7 +32,6 @@ type MultiPoly<F> = HashMap<(usize, usize), F>;
 /// eq(a,b) is takes extensions of a,b in {0,1}^num_vars such that if a and b in
 /// {0,1}^num_vars are equal then this polynomial evaluates to 1.
 pub(crate) fn eq_extension<F: PrimeField>(t: &[F]) -> Vec<DenseMultilinearExtension<F>> {
-    let start = start_timer!(|| "eq extension");
 
     let dim = t.len();
     let mut result = Vec::new();
@@ -45,7 +45,6 @@ pub(crate) fn eq_extension<F: PrimeField>(t: &[F]) -> Vec<DenseMultilinearExtens
         result.push(DenseMultilinearExtension::from_evaluations_vec(dim, poly));
     }
 
-    end_timer!(start);
     result
 }
 
@@ -56,13 +55,11 @@ pub(crate) fn eq_eval<F: PrimeField>(x: &[F], y: &[F]) -> Result<F, PCSError> {
             "x and y have different length".to_string(),
         ));
     }
-    let start = start_timer!(|| "eq_eval");
     let mut res = F::one();
     for (&xi, &yi) in x.iter().zip(y.iter()) {
         let xi_yi = xi * yi;
         res *= xi_yi + xi_yi - xi - yi + F::one();
     }
-    end_timer!(start);
     Ok(res)
 }
 fn skip_leading_zeros<F: PrimeField, P: DenseUVPolynomial<F>>(p: &P) -> (usize, &[F]) {
@@ -236,10 +233,11 @@ pub(crate) fn compute_r_hat<F: Field>(r_poly: MultiPoly<F>, m: usize) -> DensePo
 where
     F: std::ops::MulAssign + std::ops::AddAssign + Copy + PartialEq,
 {
-    let max_deg = r_poly
-        .keys()
-        .map(|&(x_deg, y_deg)| m * x_deg + y_deg)
-        .max()
+    let max_deg = std::iter::Iterator::max(
+        r_poly
+            .keys()
+            .map(|&(x_deg, y_deg)| m * x_deg + y_deg)
+    )
         .unwrap_or(0);
     let mut r_hat_coeffs = vec![F::zero(); max_deg + 1];
     for (&(x_deg, y_deg), &coeff) in &r_poly {

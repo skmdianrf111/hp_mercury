@@ -13,7 +13,7 @@ use crate::{
 };
 use ark_ec::pairing::Pairing;
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{end_timer, start_timer};
+
 use std::sync::Arc;
 use transcript::IOPTranscript;
 use arithmetic::VirtualPolynomial;
@@ -128,7 +128,7 @@ where
         ),
         PolyIOPErrors,
     > {
-        let start = start_timer!(|| "Permutation check prove");
+
         if fxs.is_empty() {
             return Err(PolyIOPErrors::InvalidParameters("fxs is empty".to_string()));
         }
@@ -164,7 +164,7 @@ where
             transcript,
         )?;
 
-        end_timer!(start);
+
         Ok((proof, prod_poly, frac_poly,f_hat))
     }
 
@@ -174,7 +174,7 @@ where
         aux_info: &Self::VPAuxInfo,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::PermutationCheckSubClaim, PolyIOPErrors> {
-        let start = start_timer!(|| "Permutation check verify");
+
 
         let beta = transcript.get_and_append_challenge(b"beta")?;
         let gamma = transcript.get_and_append_challenge(b"gamma")?;
@@ -183,7 +183,7 @@ where
         let product_check_sub_claim =
             <Self as ProductCheck<E, PCS>>::verify(proof, aux_info, transcript)?;
 
-        end_timer!(start);
+
         Ok(PermutationCheckSubClaim {
             product_check_sub_claim,
             challenges: (beta, gamma),

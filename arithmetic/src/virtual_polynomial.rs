@@ -12,9 +12,7 @@ use ark_ff::PrimeField;
 use ark_poly::{DenseMultilinearExtension, MultilinearExtension};
 use ark_serialize::CanonicalSerialize;
 use ark_std::{
-    end_timer,
     rand::{Rng, RngCore},
-    start_timer,
 };
 use rayon::prelude::*;
 use std::{cmp::max, collections::HashMap, marker::PhantomData, ops::Add, sync::Arc};
@@ -74,7 +72,6 @@ pub struct VPAuxInfo<F: PrimeField> {
 impl<F: PrimeField> Add for &VirtualPolynomial<F> {
     type Output = VirtualPolynomial<F>;
     fn add(self, other: &VirtualPolynomial<F>) -> Self::Output {
-        let start = start_timer!(|| "virtual poly add");
         let mut res = self.clone();
         for products in other.products.iter() {
             let cur: Vec<Arc<DenseMultilinearExtension<F>>> = products
@@ -86,7 +83,7 @@ impl<F: PrimeField> Add for &VirtualPolynomial<F> {
             res.add_mle_list(cur, products.0)
                 .expect("add product failed");
         }
-        end_timer!(start);
+
         res
     }
 }
@@ -181,7 +178,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         mle: Arc<DenseMultilinearExtension<F>>,
         coefficient: F,
     ) -> Result<(), ArithErrors> {
-        let start = start_timer!(|| "mul by mle");
 
         if mle.num_vars != self.aux_info.num_variables {
             return Err(ArithErrors::InvalidParameters(format!(
@@ -212,14 +208,12 @@ impl<F: PrimeField> VirtualPolynomial<F> {
 
         // increase the max degree by one as the MLE has degree 1.
         self.aux_info.max_degree += 1;
-        end_timer!(start);
         Ok(())
     }
 
     /// Evaluate the virtual polynomial at point `point`.
     /// Returns an error is point.len() does not match `num_variables`.
     pub fn evaluate(&self, point: &[F]) -> Result<F, ArithErrors> {
-        let start = start_timer!(|| "evaluation");
 
         if self.aux_info.num_variables != point.len() {
             return Err(ArithErrors::InvalidParameters(format!(
@@ -244,8 +238,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
             .iter()
             .map(|(c, p)| *c * p.iter().map(|&i| evals[i]).product::<F>())
             .sum();
-
-        end_timer!(start);
         Ok(res)
     }
 
@@ -256,7 +248,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         num_products: usize,
         rng: &mut R,
     ) -> Result<(Self, F), ArithErrors> {
-        let start = start_timer!(|| "sample random virtual polynomial");
 
         let mut sum = F::zero();
         let mut poly = VirtualPolynomial::new(nv);
@@ -269,7 +260,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
             sum += product_sum * coefficient;
         }
 
-        end_timer!(start);
         Ok((poly, sum))
     }
 
@@ -341,7 +331,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
     //
     // This function is used in ZeroCheck.
     pub fn build_f_hat(&self, r: &[F]) -> Result<Self, ArithErrors> {
-        let start = start_timer!(|| "zero check build hat f");
 
         if self.aux_info.num_variables != r.len() {
             return Err(ArithErrors::InvalidParameters(format!(
@@ -355,7 +344,6 @@ impl<F: PrimeField> VirtualPolynomial<F> {
         let mut res = self.clone();
         res.mul_by_mle(eq_x_r, F::one())?;
 
-        end_timer!(start);
         Ok(res)
     }
 
@@ -380,13 +368,13 @@ pub fn eq_eval<F: PrimeField>(x: &[F], y: &[F]) -> Result<F, ArithErrors> {
             "x and y have different length".to_string(),
         ));
     }
-    let start = start_timer!(|| "eq_eval");
+
     let mut res = F::one();
     for (&xi, &yi) in x.iter().zip(y.iter()) {
         let xi_yi = xi * yi;
         res *= xi_yi + xi_yi - xi - yi + F::one();
     }
-    end_timer!(start);
+
     Ok(res)
 }
 

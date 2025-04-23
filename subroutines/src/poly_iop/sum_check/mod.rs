@@ -14,13 +14,14 @@ use crate::{barycentric_weights, extrapolate,poly_iop::{
 
 use ark_ff::PrimeField;
 use ark_poly::{DenseMultilinearExtension,MultilinearExtension};
-use ark_std::{cfg_into_iter, end_timer, start_timer};
+use ark_std::cfg_into_iter;
 use ark_std::log2;
 use transcript::IOPTranscript;
 use arithmetic::eq_poly::EqPolynomial;
 use arithmetic::{build_eq_x_r, build_eq_x_r_vec, fix_variables, unipoly::interpolate_uni_poly, math::Math, VPAuxInfo, VirtualPolynomial};
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, sync::Arc};
 use rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator, IntoParallelIterator};
+use ark_std::time::Instant;
 
 mod prover;
 mod verifier;
@@ -148,16 +149,12 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
     type Transcript = IOPTranscript<F>;
 
     fn extract_sum(proof: &Self::SumCheckProof) -> F {
-        let start = start_timer!(|| "extract sum");
         let res = proof.proofs[0].evaluations[0] + proof.proofs[0].evaluations[1];
-        end_timer!(start);
         res
     }
 
     fn init_transcript() -> Self::Transcript {
-        let start = start_timer!(|| "init transcript");
         let res = IOPTranscript::<F>::new(b"Initializing SumCheck transcript");
-        end_timer!(start);
         res
     }
 
@@ -165,8 +162,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         poly: &Self::VirtualPolynomial,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::SumCheckProof, PolyIOPErrors> {
-        let start = start_timer!(|| "sum check prove");
-
         transcript.append_serializable_element(b"aux info", &poly.aux_info)?;
 
         let mut prover_state = IOPProverState::prover_init(poly)?;
@@ -184,7 +179,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
             prover_state.challenges.push(p)
         };
 
-        end_timer!(start);
         Ok(IOPProof {
             point: prover_state.challenges,
             proofs: prover_msgs,
@@ -197,8 +191,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         aux_info: &Self::VPAuxInfo,
         transcript: &mut Self::Transcript,
     ) -> Result<Self::SumCheckSubClaim, PolyIOPErrors> {
-        let start = start_timer!(|| "sum check verify");
-
         transcript.append_serializable_element(b"aux info", aux_info)?;
         let mut verifier_state = IOPVerifierState::verifier_init(aux_info);
         for i in 0..aux_info.num_variables {
@@ -212,8 +204,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         }
 
         let res = IOPVerifierState::check_and_generate_subclaim(&verifier_state, &claimed_sum);
-
-        end_timer!(start);
         res
     }
 
@@ -222,7 +212,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         sums: Vec<F>,
         transcript: &mut IOPTranscript<F>,
     ) -> Result<(Self::SumCheckProof, F, VPAuxInfo<F>, VirtualPolynomial<F>, F), PolyIOPErrors> {
-        let start = start_timer!(|| "sum fold");
         let m = polys.len();
         let t = polys[0].flattened_ml_extensions.len();
         let num_vars = polys[0].aux_info.num_variables;
@@ -282,16 +271,16 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
         let mut prover_msgs = Vec::with_capacity(length);
         let mut challenges = Vec::with_capacity(length);
         let mut eq_fix = eq_xr_poly.as_ref().clone();
+
+        let mut flattened_ml_extensions: Vec<DenseMultilinearExtension<F>> = compose_poly
+            .flattened_ml_extensions
+            .par_iter()
+            .map(|x| x.as_ref().clone())
+            .collect();
     
         for round in 0..length {
             // Start timer for this round
-            let round_timer = start_timer!(|| format!("sumcheck round {}", round));
-    
-            let mut flattened_ml_extensions: Vec<DenseMultilinearExtension<F>> = compose_poly
-                .flattened_ml_extensions
-                .par_iter()
-                .map(|x| x.as_ref().clone())
-                .collect();
+            let start= Instant::now();
     
             if let Some(chal) = challenge {
                 if round == 0 {
@@ -407,12 +396,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
                     .for_each(|(products_sum, sum)| *products_sum += sum);
             });
     
-            // update prover's state to the partial evaluated polynomial
-            compose_poly.flattened_ml_extensions = flattened_ml_extensions
-                .par_iter()
-                .map(|x| Arc::new(x.clone()))
-                .collect();
-    
             let message = IOPProverMessage {
                 evaluations: products_sum,
             };
@@ -421,7 +404,8 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
             challenge = Some(transcript.get_and_append_challenge(b"Internal round")?);
     
             // End timer for this round
-            end_timer!(round_timer);
+            let duration = start.elapsed();
+            println!("---------------SumFold Round {:?} Duration {:?}---------",round,duration);
         }
     
         // pushing the last challenge point to the state
@@ -463,7 +447,6 @@ impl<F: PrimeField> SumCheck<F> for PolyIOP<F> {
             raw_pointers_lookup_table: hm,
         };
     
-        end_timer!(start);
         Ok((proof, sum_t, q_aux_info, folded_poly, v))
     }
 }

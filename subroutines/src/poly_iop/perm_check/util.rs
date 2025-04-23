@@ -40,7 +40,6 @@ pub(super) fn computer_nums_and_denoms<F: PrimeField>(
     ),
     PolyIOPErrors,
 > {
-    let start = start_timer!(|| "compute numerators and denominators");
 
     let num_vars = fxs[0].num_vars;
     let mut numerators = vec![];
@@ -70,6 +69,6 @@ pub(super) fn computer_nums_and_denoms<F: PrimeField>(
         )));
     }
 
-    end_timer!(start);
+    // end_timer!(start);
     Ok((numerators, denominators))
 }

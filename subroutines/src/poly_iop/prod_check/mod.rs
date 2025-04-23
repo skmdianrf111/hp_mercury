@@ -19,7 +19,7 @@ use arithmetic::{VPAuxInfo,VirtualPolynomial};
 use ark_ec::pairing::Pairing;
 use ark_ff::{One, PrimeField, Zero};
 use ark_poly::DenseMultilinearExtension;
-use ark_std::{end_timer, start_timer};
+
 use std::sync::Arc;
 use transcript::IOPTranscript;
 
@@ -170,8 +170,7 @@ where
         ),
         PolyIOPErrors,
     > {
-        let start = start_timer!(|| "prod_check prove");
-
+ 
         if fxs.is_empty() {
             return Err(PolyIOPErrors::InvalidParameters("fxs is empty".to_string()));
         }
@@ -203,7 +202,6 @@ where
 
         // build the zero-check proof
         let (f_hat, _) = prove_zero_check(fxs, gxs, &frac_poly, &prod_x, &alpha, transcript)?;
-        end_timer!(start);
 
         Ok((
             ProductCheckProof {
