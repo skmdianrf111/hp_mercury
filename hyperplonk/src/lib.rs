@@ -51,7 +51,7 @@ where
     fn preprocess(
         index: &Self::Index,
         pcs_srs: &PCS::SRS,
-    ) -> Result<(Self::ProvingKey, Self::VerifyingKey), HyperPlonkErrors>;
+    ) -> Result<(Self::ProvingKey, Self::VerifyingKey,Duration), HyperPlonkErrors>;
 
     /// Generate HyperPlonk SNARK proof.
     ///

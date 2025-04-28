@@ -15,6 +15,7 @@ use ark_poly::{
     univariate::DensePolynomial, DenseMultilinearExtension, DenseUVPolynomial,
     MultilinearExtension, Polynomial,
 };
+use ark_std::time::Instant;
 use ark_poly_commit::kzg10::Proof;
 use ark_poly_commit::kzg10::VerifierKey;
 use ark_poly_commit::kzg10::KZG10;
@@ -63,9 +64,13 @@ where
     type Commitment = Commitment<E>;
     type Proof = SamaritanProof<E>;
     type BatchProof = BatchProof<E, Self>;
+    
 
     fn gen_srs_for_testing<R: Rng>(rng: &mut R, log_size: usize) -> Result<Self::SRS, PCSError> {
+        let start = Instant::now();
         let srs = Self::SRS::gen_srs_for_testing(rng, log_size)?;
+        let duration = start.elapsed();
+        println!("-----------------Setup Samaritan Duration{:?}",duration);
         Ok(srs)
     }
 

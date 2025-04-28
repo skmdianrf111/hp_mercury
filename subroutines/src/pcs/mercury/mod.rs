@@ -7,11 +7,11 @@ use std::collections::BTreeMap;
 use std::iter;
 use std::marker::PhantomData;
 use std::ops::{Deref, Mul, Neg};
-use std::ptr::hash;
 use std::sync::Arc;
 use crate::pcs::{
     prelude::Commitment, PCSError, PolynomialCommitmentScheme, StructuredReferenceString
 };
+use ark_std::time::Instant;
 use ark_ec::{
     pairing::Pairing, scalar_mul::variable_base::VariableBaseMSM, AffineRepr, CurveGroup,
 };
@@ -72,8 +72,13 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
     /// WARNING: THIS FUNCTION IS FOR TESTING PURPOSE ONLY.
     /// THE OUTPUT SRS SHOULD NOT BE USED IN PRODUCTION.
     fn gen_srs_for_testing<R: Rng>(rng: &mut R, log_size: usize) -> Result<Self::SRS, PCSError> {
-        Self::SRS::gen_srs_for_testing(rng, log_size)
+        let start = Instant::now();
+        let srs = Self::SRS::gen_srs_for_testing(rng, log_size)?;
+        let duration = start.elapsed();
+        println!("-----------------Setup Samaritan Duration{:?}",duration);
+        Ok(srs)
     }
+
 
     /// Trim the universal parameters to specialize the public parameters.
     /// Input both `supported_log_degree` for univariate and
