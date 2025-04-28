@@ -75,7 +75,7 @@ impl<E: Pairing> PolynomialCommitmentScheme<E> for MercuryPCS<E> {
         let start = Instant::now();
         let srs = Self::SRS::gen_srs_for_testing(rng, log_size)?;
         let duration = start.elapsed();
-        println!("-----------------Setup Samaritan Duration{:?}",duration);
+        println!("-----------------Setup Mercury Duration{:?}",duration);
         Ok(srs)
     }
 

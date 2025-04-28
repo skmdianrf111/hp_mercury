@@ -221,6 +221,7 @@ where
         ),
         HyperPlonkErrors,
     > {
+        let start = start_timer!(||"prove");
         let f_num_vars = f_hats[0].aux_info.num_variables;
         let f_t = f_hats[0].flattened_ml_extensions.len();
         let f_m = f_hats.len();
@@ -288,7 +289,7 @@ where
                 eval_idx += 1;
             }
         }
-
+        end_timer!(start);
         Ok((f_folded_evals, perm_folded_evals, batch_opening_proof))
     }
 
@@ -345,7 +346,6 @@ where
         }
         commitment_idx += f_hats.len();
 
-        let checkpoint2 = Instant::now();
         for (poly, comms) in perm_f_hats
             .iter()
             .zip(commitments.iter().skip(commitment_idx))
@@ -356,7 +356,6 @@ where
                 all_points.push(perm_eval_point.clone());
             }
         }
-        println!("checkpoint2:{:?}", checkpoint2.elapsed());
 
         let compute_fold_eval = Instant::now();
 
@@ -432,19 +431,23 @@ mod tests {
     use subroutines::SumCheck;
     use subroutines::pcs::Samaritan::SamaritanPCS;
     use ark_std::time::Instant;
+    use ark_bn254::{Bn254, Fr};
 
     #[test]
     fn test_hyperplonk_e2e() -> Result<(), HyperPlonkErrors> {
         let mock_gate = CustomizedGates::vanilla_plonk_gate();
-        let nv = 18;
-        let log_partition = 1;
-        let num_constraints = 1 << nv;
-        let num_partition = 1 << log_partition;
-        println!("---------begin test mecury---------");
-        test_hyperplonk_helper::<Bls12_381>(mock_gate.clone(), num_constraints, num_partition, nv - log_partition);
-        println!("---------finish test mecury---------");
-        println!("---------begin test sama---------");
-        test_hyperplonk_Sama::<Bls12_381>(mock_gate, num_constraints, num_partition, nv - log_partition)
+        for nv in 18..23 {
+            for log_partition in 1..4 {
+                let num_constraints = 1 << nv;
+                let num_partition = 1 << log_partition;
+                println!("---------begin test mecury nv:{:?} partition:{:?}---------",nv, num_partition);
+                test_hyperplonk_helper::<Bn254>(mock_gate.clone(), num_constraints, num_partition, nv - log_partition);
+                println!("---------finish test mecury---------");
+                println!("---------begin test sama nv:{:?} partition:{:?}---------",nv, num_partition);
+                test_hyperplonk_Sama::<Bn254>(mock_gate.clone(), num_constraints, num_partition, nv - log_partition);
+            }
+        }
+        Ok(())
     }
 
     fn test_hyperplonk_helper<E: Pairing>(
